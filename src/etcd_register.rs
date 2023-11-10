@@ -1,11 +1,11 @@
 /*
  * @Author: plucky
  * @Date: 2023-11-06 14:25:18
- * @LastEditTime: 2023-11-10 16:37:35
+ * @LastEditTime: 2023-11-10 20:13:45
  */
 
 use async_recursion::async_recursion;
-pub use etcd_client::*;
+use etcd_client::*;
 use tracing::info;
 
 /// etcd 服务注册

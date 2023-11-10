@@ -1,6 +1,6 @@
 [package]
 name = "etcd-discovery"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["plucky"]
 description = "Etcd discovery and register for tonic"
@@ -13,7 +13,8 @@ keywords = [
 ]
 categories = ["database"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/cody-why/etcd-discover"
+repository = "https://github.com/cody-why/etcd-discovery"
+documentation = "https://docs.rs/etcd-discovery"
 
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

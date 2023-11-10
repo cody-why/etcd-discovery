@@ -1,14 +1,16 @@
 /*
  * @Author: plucky
  * @Date: 2023-11-06 10:30:41
- * @LastEditTime: 2023-11-10 16:20:21
+ * @LastEditTime: 2023-11-10 20:18:30
  */
 
-use etcd_client::*;
+use std::error::Error;
+
+use etcd_client::ConnectOptions;
 use etcd_discovery::{EtcdDiscovery, EtcdRegister};
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt().init();
     // 服务发现
     let opt = ConnectOptions::new().with_user("tonic_user", "789789");
