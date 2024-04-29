@@ -23,7 +23,7 @@
 ``` toml
 [dependencies]
 tokio = { version = "1", features = ["macros","rt-multi-thread"] }
-tonic = "0.10"
+tonic = "0.11"
 etcd-discovery = "0.1"
 ```
 

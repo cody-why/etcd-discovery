@@ -4,7 +4,7 @@
  * @LastEditTime: 2024-4-29 21:31:22
  */
 
-use std::{collections::HashMap, sync::{RwLock, Arc}, time::Duration, str::FromStr};
+use std::{collections::HashMap, sync::{RwLock, Arc}, time::Duration};
 
 use etcd_client::*;
 use tokio::sync::mpsc::Sender;
@@ -43,7 +43,7 @@ impl EtcdTonicDiscovery {
 impl EtcdTonicDiscovery {
     /// 用etcd_client创建服务发现
     pub fn new(client: Client) -> Self {
-        let (channel, tx) = Channel::balance_channel(256);
+        let (channel, tx) = Channel::balance_channel(1024);
         
         Self {
             etcd_client: client,
@@ -68,7 +68,7 @@ impl EtcdTonicDiscovery {
             let key = kv.key_str().unwrap_or_default();
             let value = kv.value_str().unwrap_or_default();
             info!("discover put key: {} value: {}", key, value);
-            self.add_service(key, value).await;
+            self.add_service(key, value);
         }
 
         let opt = Some(WatchOptions::new().with_prefix());
@@ -88,7 +88,7 @@ impl EtcdTonicDiscovery {
                                 if key.is_empty() {
                                     continue
                                 }
-                                Self::add_service_map(&rx,&service_map, key, value).await;
+                                Self::add_service_map(&rx,&service_map, key, value);
                             }
                             
                         }
@@ -96,7 +96,7 @@ impl EtcdTonicDiscovery {
                             if let Some(kv) = event.kv(){
                                 let key = kv.key_str().unwrap_or_default();
                                 info!("discover watch delete key: {}", key);
-                                Self::remove_service_map(&rx,&service_map, key).await;
+                                Self::remove_service_map(&rx,&service_map, key);
                             }
                         }
                     }
@@ -119,23 +119,23 @@ impl EtcdTonicDiscovery {
         self.service_map.write().unwrap().remove(key.as_ref())
     }
     /// 手动添加一个服务
-    pub async fn add_service(&self, key: impl AsRef<str>, url: &str) {
-        Self::add_service_map(&self.tx, &self.service_map, key.as_ref(), url).await;
+    pub fn add_service(&self, key: impl AsRef<str>, url: &str) {
+        Self::add_service_map(&self.tx, &self.service_map, key.as_ref(), url);
         
     }
 
     #[inline]
-    async fn new_endpoint(uri: &str, timeout: u64) -> Result<Endpoint, tonic::transport::Error>{
-        Ok(Endpoint::from_str(uri)?
+    fn new_endpoint(uri: impl Into<String>, timeout: u64) -> Result<Endpoint, tonic::transport::Error>{
+        Ok(Endpoint::from_shared(uri.into())?
             .timeout(Duration::from_secs(timeout))
             )
         
     }
 
     #[inline]
-    async fn add_service_map(rx: &Sender<Change<String, Endpoint>>, service_map: &RwLock<HashMap<String, Channel>>, key: impl Into<String>, value: &str) {
+    fn add_service_map(rx: &Sender<Change<String, Endpoint>>, service_map: &RwLock<HashMap<String, Channel>>, key: impl Into<String>, value: &str) {
         let key = key.into();
-        if let Ok(endpoint) = Self::new_endpoint(value, 10).await {
+        if let Ok(endpoint) = Self::new_endpoint(value, 10) {
             service_map
                 .write()
                 .unwrap()
@@ -149,7 +149,7 @@ impl EtcdTonicDiscovery {
     }
     
     #[inline]
-    async fn remove_service_map(rx: &Sender<Change<String, Endpoint>>, service_map: &RwLock<HashMap<String, Channel>>, key: impl AsRef<str>) {
+    fn remove_service_map(rx: &Sender<Change<String, Endpoint>>, service_map: &RwLock<HashMap<String, Channel>>, key: impl AsRef<str>) {
         service_map.write().unwrap().remove(key.as_ref());
         rx.try_send(Change::Remove(key.as_ref().into())).unwrap();
     }
