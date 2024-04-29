@@ -55,7 +55,7 @@ impl EtcdDiscoveryBase {
         for kv in resp.kvs() {
             let key = kv.key_str().unwrap_or_default();
             let value = kv.value_str().unwrap_or_default();
-            info!("put key: {} value: {}", key, value);
+            info!("discover put key: {} value: {}", key, value);
             self.add_service(key, value).await;
         }
 
@@ -71,7 +71,7 @@ impl EtcdDiscoveryBase {
                             if let Some(kv) = event.kv(){
                                 let key = kv.key_str().unwrap_or_default();
                                 let value = kv.value_str().unwrap_or_default();
-                                info!("watch put key: {} value: {}", key, value);
+                                info!("discover watch put key: {} value: {}", key, value);
                                 if key.is_empty() {
                                     continue
                                 }
@@ -82,7 +82,7 @@ impl EtcdDiscoveryBase {
                         etcd_client::EventType::Delete => {
                             if let Some(kv) = event.kv(){
                                 let key = kv.key_str().unwrap_or_default();
-                                info!("watch delete key: {}", key);
+                                info!("discover watch delete key: {}", key);
                                 Self::remove_service_map(&service_map, key).await;
                             }
                         }

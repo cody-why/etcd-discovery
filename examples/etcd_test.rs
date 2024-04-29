@@ -7,14 +7,14 @@
 use std::error::Error;
 
 use etcd_client::ConnectOptions;
-use etcd_discovery::{EtcdDiscovery, EtcdRegister};
+use etcd_discovery::{EtcdTonicDiscovery, EtcdRegister};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt().init();
     // 服务发现
     let opt = ConnectOptions::new().with_user("tonic_user", "789789");
-    let mut discover = EtcdDiscovery::connect(["127.0.0.1:2379"], Some(opt.to_owned())).await?;
+    let mut discover = EtcdTonicDiscovery::connect(["127.0.0.1:2379"], Some(opt.to_owned())).await?;
     discover.service_discover("/hello").await?;
     
     tokio::spawn(async move {
@@ -28,6 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         registry.put("/hello/2", "http://world.or").await.unwrap();
         tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
         registry.delete("/hello/1").await.unwrap();
+        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
     });
 

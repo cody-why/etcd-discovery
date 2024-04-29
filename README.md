@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().init();
     // 使用etcd服务发现
     let opt = ConnectOptions::new().with_user("tonic_user", "789789");
-    let mut discover = EtcdDiscovery::connect(["127.0.0.1:2379"], Some(opt)).await?;
+    let mut discover = EtcdTonicDiscovery::connect(["127.0.0.1:2379"], Some(opt)).await?;
     discover.service_discover("/hello").await?;
     
     let channel = discover.get_service("/hello/1").unwrap();

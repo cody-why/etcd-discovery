@@ -1,7 +1,7 @@
 /*
  * @Author: plucky
  * @Date: 2023-11-06 15:04:59
- * @LastEditTime: 2023-11-12 09:31:22
+ * @LastEditTime: 2024-4-29 09:31:22
  */
 
 use std::{collections::HashMap, sync::{RwLock, Arc}, time::Duration, str::FromStr};
@@ -14,22 +14,22 @@ use tower::discover::Change;
 
 /// etcd 服务发现 for tonic
 #[allow(dead_code)]
-pub struct EtcdDiscovery {
+pub struct EtcdTonicDiscovery {
     etcd_client: Client,
     service_map: Arc<RwLock<HashMap<String, Channel>>>,
-    // 所有服务的channel
-    all_channel: Channel,
+    // 所有前缀服务的channel
+    tonic_channel: Channel,
     // 通知all_channel服务变化
     rx: Sender<Change<String, Endpoint>>,
 }
 
-impl EtcdDiscovery {
-    /// 获取所有服务的channel, 负载均衡的channel
+impl EtcdTonicDiscovery {
+    /// 获取所有前缀服务的channel, 负载均衡的channel
     pub fn get_all_channel(&self) -> Channel {
-        self.all_channel.clone()
+        self.tonic_channel.clone()
     }
 
-    /// 获取所有服务的map
+    /// 获取所有前缀服务的map
     pub fn get_service_map(&self) -> Arc<RwLock<HashMap<String, Channel>>> {
         self.service_map.clone()
     }
@@ -40,15 +40,15 @@ impl EtcdDiscovery {
     }
 }
 
-impl EtcdDiscovery {
+impl EtcdTonicDiscovery {
     /// 用etcd_client创建服务发现
     pub fn new(client: Client) -> Self {
-        let (channel, rx) = Channel::balance_channel(1024);
+        let (channel, rx) = Channel::balance_channel(256);
         
         Self {
             etcd_client: client,
             service_map: Arc::new(RwLock::new(HashMap::new())),
-            all_channel: channel,
+            tonic_channel: channel,
             rx,
         }
     }
@@ -67,7 +67,7 @@ impl EtcdDiscovery {
         for kv in resp.kvs() {
             let key = kv.key_str().unwrap_or_default();
             let value = kv.value_str().unwrap_or_default();
-            info!("put key: {} value: {}", key, value);
+            info!("discover put key: {} value: {}", key, value);
             self.add_service(key, value).await;
         }
 
@@ -84,7 +84,7 @@ impl EtcdDiscovery {
                             if let Some(kv) = event.kv(){
                                 let key = kv.key_str().unwrap_or_default();
                                 let value = kv.value_str().unwrap_or_default();
-                                info!("watch put key: {} value: {}", key, value);
+                                info!("discover watch put key: {} value: {}", key, value);
                                 if key.is_empty() {
                                     continue
                                 }
@@ -95,7 +95,7 @@ impl EtcdDiscovery {
                         etcd_client::EventType::Delete => {
                             if let Some(kv) = event.kv(){
                                 let key = kv.key_str().unwrap_or_default();
-                                info!("watch delete key: {}", key);
+                                info!("discover watch delete key: {}", key);
                                 Self::remove_service_map(&rx,&service_map, key).await;
                             }
                         }
@@ -114,18 +114,18 @@ impl EtcdDiscovery {
     pub fn get_service(&self, key: impl AsRef<str>) -> Option<Channel> {
         self.service_map.read().unwrap().get(key.as_ref()).cloned()
     }
-    
+    /// 删除一个服务
     pub fn remove_service(&mut self, key: impl AsRef<str>) -> Option<Channel> {
         self.service_map.write().unwrap().remove(key.as_ref())
     }
-
+    /// 手动添加一个服务
     pub async fn add_service(&self, key: impl AsRef<str>, url: &str) {
         Self::add_service_map(&self.rx, &self.service_map, key.as_ref(), url).await;
         
     }
 
     #[inline]
-    async fn new_channel(uri: &str, timeout: u64) -> Result<Endpoint, tonic::transport::Error>{
+    async fn new_endpoint(uri: &str, timeout: u64) -> Result<Endpoint, tonic::transport::Error>{
         Ok(Endpoint::from_str(uri)?
             .timeout(Duration::from_secs(timeout))
             )
@@ -135,16 +135,15 @@ impl EtcdDiscovery {
     #[inline]
     async fn add_service_map(rx: &Sender<Change<String, Endpoint>>, service_map: &RwLock<HashMap<String, Channel>>, key: impl Into<String>, value: &str) {
         let key = key.into();
-        if let Ok(channel) = Self::new_channel(value, 10).await {
+        if let Ok(channel) = Self::new_endpoint(value, 10).await {
             service_map
                 .write()
                 .unwrap()
                 .insert(key.clone(), channel.connect_lazy());
             rx.try_send(Change::Insert(key, channel)).unwrap();
 
-        }
-        else {
-            tracing::info!("connect error: {:?}", value);
+        }else {
+            tracing::info!("tonic endpoint connect error: {:?}", value);
         }
         
     }
@@ -162,13 +161,13 @@ impl EtcdDiscovery {
 #[cfg(test)]
 mod tests {
     use etcd_client::*;
-    use crate::etcd_discovery::EtcdDiscovery;
+    use crate::etcd_tonic_discovery::EtcdTonicDiscovery;
 
     #[tokio::test]
     async fn test_discovery() -> Result<(), etcd_client::Error> {
         tracing_subscriber::fmt().init();
         let opt = ConnectOptions::new().with_user("root", "789789");
-        let mut discover = EtcdDiscovery::connect(["127.0.0.1:2379"], Some(opt)).await?;
+        let mut discover = EtcdTonicDiscovery::connect(["127.0.0.1:2379"], Some(opt)).await?;
         discover.service_discover("/hello/1").await?;
 
         tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
