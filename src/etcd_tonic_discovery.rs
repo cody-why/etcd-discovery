@@ -1,7 +1,7 @@
 /*
  * @Author: plucky
  * @Date: 2023-11-06 15:04:59
- * @LastEditTime: 2024-4-29 09:31:22
+ * @LastEditTime: 2024-4-29 21:31:22
  */
 
 use std::{collections::HashMap, sync::{RwLock, Arc}, time::Duration, str::FromStr};
@@ -20,7 +20,7 @@ pub struct EtcdTonicDiscovery {
     // 所有前缀服务的channel
     tonic_channel: Channel,
     // 通知all_channel服务变化
-    rx: Sender<Change<String, Endpoint>>,
+    tx: Sender<Change<String, Endpoint>>,
 }
 
 impl EtcdTonicDiscovery {
@@ -43,13 +43,13 @@ impl EtcdTonicDiscovery {
 impl EtcdTonicDiscovery {
     /// 用etcd_client创建服务发现
     pub fn new(client: Client) -> Self {
-        let (channel, rx) = Channel::balance_channel(256);
+        let (channel, tx) = Channel::balance_channel(256);
         
         Self {
             etcd_client: client,
             service_map: Arc::new(RwLock::new(HashMap::new())),
             tonic_channel: channel,
-            rx,
+            tx,
         }
     }
 
@@ -74,7 +74,7 @@ impl EtcdTonicDiscovery {
         let opt = Some(WatchOptions::new().with_prefix());
         let (mut watcher, mut stream) = self.etcd_client.watch(prefix, opt).await?;
         let service_map = self.service_map.clone();
-        let rx = self.rx.clone();
+        let rx = self.tx.clone();
 
         tokio::spawn(async move {
             while let Some(resp) = stream.message().await.unwrap() {
@@ -120,7 +120,7 @@ impl EtcdTonicDiscovery {
     }
     /// 手动添加一个服务
     pub async fn add_service(&self, key: impl AsRef<str>, url: &str) {
-        Self::add_service_map(&self.rx, &self.service_map, key.as_ref(), url).await;
+        Self::add_service_map(&self.tx, &self.service_map, key.as_ref(), url).await;
         
     }
 
@@ -135,12 +135,12 @@ impl EtcdTonicDiscovery {
     #[inline]
     async fn add_service_map(rx: &Sender<Change<String, Endpoint>>, service_map: &RwLock<HashMap<String, Channel>>, key: impl Into<String>, value: &str) {
         let key = key.into();
-        if let Ok(channel) = Self::new_endpoint(value, 10).await {
+        if let Ok(endpoint) = Self::new_endpoint(value, 10).await {
             service_map
                 .write()
                 .unwrap()
-                .insert(key.clone(), channel.connect_lazy());
-            rx.try_send(Change::Insert(key, channel)).unwrap();
+                .insert(key.clone(), endpoint.connect_lazy());
+            rx.try_send(Change::Insert(key, endpoint)).unwrap();
 
         }else {
             tracing::info!("tonic endpoint connect error: {:?}", value);
